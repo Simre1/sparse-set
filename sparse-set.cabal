@@ -20,14 +20,14 @@ category:           Data
 extra-source-files: CHANGELOG.md
 
 library
-    exposed-modules:  MyLib
-
-    -- Modules included in this library but not exported.
-    -- other-modules:
-
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
-    build-depends:    base ^>=4.16.3.0
+    exposed-modules:  
+        SparseSet.Boxed
+        SparseSet.NoComponent
+        SparseSet.Storable
+        SparseSet.Unboxed
+    build-depends:    
+        base ^>=4.16.0.0,
+        vector
     hs-source-dirs:   src
     default-language: GHC2021
 
@@ -36,4 +36,4 @@ test-suite sparse-set-test
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          MyLibTest.hs
-    build-depends:    base ^>=4.16.3.0
+    build-depends:    base ^>=4.16.0.0
