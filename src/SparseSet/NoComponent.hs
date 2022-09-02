@@ -50,8 +50,8 @@ create sparseSize denseSize = liftIO $ do
 
 -- | Inserts a value into the sparse set at the given 'Word32' index.
 -- Overwrites the old value if there is one.
-insert :: (MonadIO m) => SparseSetNoComponent -> Word32 -> a -> m ()
-insert (SparseSetNoComponent sparse entities sizeRef) i a = liftIO $ do
+insert :: (MonadIO m) => SparseSetNoComponent -> Word32 -> m ()
+insert (SparseSetNoComponent sparse entities sizeRef) i = liftIO $ do
   index <- VPM.unsafeRead sparse (fromIntegral i)
   if index /= maxBound
     then pure ()
