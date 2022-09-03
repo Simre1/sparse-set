@@ -1,6 +1,7 @@
 module SparseSet.NextId.NoComponent
   ( SparseSetNextIdNoComponent,
     create,
+    nextId,
     contains,
     size,
     remove,
@@ -32,6 +33,7 @@ import Prelude hiding (lookup)
 -- the index of an element to the dense array.
 -- The sparse set is useful when you have a lot of possible keys but not that many values
 -- to actually store. Iteration over the values is very quick.
+-- This sparse set keeps track of which keys are used and it is possible to get unused keys in constant time.
 data SparseSetNextIdNoComponent = SparseSetNextIdNoComponent
   { sparseSetSparse :: {-# UNPACK #-} !(VPM.IOVector Word32),
     sparseSetEntities :: {-# UNPACK #-} !(VPM.IOVector Word32),
@@ -40,7 +42,7 @@ data SparseSetNextIdNoComponent = SparseSetNextIdNoComponent
   }
 
 -- | Creates a sparse set with the first value as the sparse array size and the second as the dense array size.
--- Given that the sparse array size is x, then keys from 0..x can be used. maxBound may never be used for x.
+-- Given that the sparse array size is x, then keys from 0..x are used. maxBound may never be used for x.
 -- Given that the dense array size is y, then y values can be stored. y should not be larger than x.
 create :: (MonadIO m) => Word32 -> Word32 -> m (SparseSetNextIdNoComponent)
 create sparseSize denseSize = liftIO $ do
@@ -51,20 +53,25 @@ create sparseSize denseSize = liftIO $ do
   SparseSetNextIdNoComponent sparse entities <$> newIORef size <*> newIORef (1, 0)
 {-# INLINE create #-}
 
--- | NextId adds a new key to the set and returns it
+-- | Adds a new key to the set and returns it
 nextId :: (MonadIO m) => SparseSetNextIdNoComponent -> m Word32
 nextId (SparseSetNextIdNoComponent sparse entities sizeRef headAndTailRef) = liftIO $ do
   (head, tail) <- readIORef headAndTailRef
 
   nextIndex <- atomicModifyIORef' sizeRef (\size -> (succ size, size))
   nextHead <- VPM.read sparse head
+
   VPM.write sparse tail nextHead
 
   VPM.unsafeWrite entities nextIndex (fromIntegral head)
 
   VPM.unsafeWrite sparse head (fromIntegral nextIndex)
 
-  writeIORef headAndTailRef (fromIntegral $ clearBit nextHead 31, tail)
+  let nextHead' = fromIntegral $ clearBit nextHead 31
+
+  if nextHead' == head
+    then writeIORef headAndTailRef (-1, -1)
+    else writeIORef headAndTailRef (nextHead', tail)
   pure (fromIntegral head)
 {-# INLINE nextId #-}
 
@@ -91,15 +98,16 @@ remove (SparseSetNextIdNoComponent sparse entities sizeRef headAndTailRef) i = l
       lastDenseIndex <- atomicModifyIORef sizeRef $ \size -> let s = max 0 (pred size) in (s, s)
 
       lastKey <- VPM.unsafeRead entities lastDenseIndex
-
-      VPM.unsafeWrite sparse (fromIntegral i) (setBit (fromIntegral head) 31)
-      VPM.unsafeWrite sparse tail (setBit (fromIntegral i) 31)
-
       VPM.unsafeWrite entities (fromIntegral index) lastKey
-
       VPM.unsafeWrite sparse (fromIntegral lastKey) index
-
-      writeIORef headAndTailRef (head, fromIntegral i)
+      if head /= -1
+        then do
+          VPM.unsafeWrite sparse tail (setBit i 31)
+          VPM.unsafeWrite sparse (fromIntegral i) (setBit (fromIntegral head) 31)
+          writeIORef headAndTailRef (head, fromIntegral i)
+        else do
+          VPM.unsafeWrite sparse (fromIntegral i) ((setBit i 31))
+          writeIORef headAndTailRef (fromIntegral i, fromIntegral i)
 {-# INLINE remove #-}
 
 -- | Iterate over all values with their corresponding key.
