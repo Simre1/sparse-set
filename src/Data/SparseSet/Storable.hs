@@ -1,4 +1,4 @@
-module SparseSet.Storable
+module Data.SparseSet.Storable
   ( SparseSetStorable,
     create,
     insert,
@@ -36,10 +36,10 @@ import Prelude hiding (lookup)
 -- The sparse set is useful when you have a lot of possible keys but not that many values
 -- to actually store. Iteration over the values is very quick.
 data SparseSetStorable a = SparseSetStorable
-  { sparseSetSparse :: {-# UNPACK #-} !(VPM.IOVector Word32),
-    sparseSetEntities :: {-# UNPACK #-} !(VPM.IOVector Word32),
-    sparseSetDense :: {-# UNPACK #-} !(VM.IOVector a),
-    sparseSetSize :: {-# UNPACK #-} !(IORef Int)
+  { sparseSetSparse :: {-# UNPACK #-} VPM.IOVector Word32,
+    sparseSetEntities :: {-# UNPACK #-} VPM.IOVector Word32,
+    sparseSetDense :: {-# UNPACK #-} VM.IOVector a,
+    sparseSetSize :: {-# UNPACK #-} IORef Int
   }
 
 type ElementConstraint a = V.Storable a :: Constraint
