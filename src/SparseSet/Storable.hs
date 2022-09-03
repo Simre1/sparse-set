@@ -9,7 +9,7 @@ module SparseSet.Storable
     remove,
     for,
     visualize,
-    -- growDense,
+    growDense,
   )
 where
 
@@ -28,7 +28,6 @@ import Data.Vector.Primitive.Mutable qualified as VPM
 import Data.Vector.Storable qualified as V
 import Data.Vector.Storable.Mutable qualified as VM
 import Data.Word (Word32)
-import Foreign qualified as F
 import Prelude hiding (lookup)
 
 -- | The sparse set contains a sparse array and a dense array. The 'a' values are stored
@@ -39,7 +38,7 @@ import Prelude hiding (lookup)
 data SparseSetStorable a = SparseSetStorable
   { sparseSetSparse :: {-# UNPACK #-} !(VPM.IOVector Word32),
     sparseSetEntities :: {-# UNPACK #-} !(VPM.IOVector Word32),
-    sparseSetDense :: {-# UNPACK #-} !(F.Ptr a),
+    sparseSetDense :: {-# UNPACK #-} !(VM.IOVector a),
     sparseSetSize :: {-# UNPACK #-} !(IORef Int)
   }
 
@@ -48,10 +47,10 @@ type ElementConstraint a = V.Storable a :: Constraint
 -- | Creates a sparse set with the first value as the sparse array size and the second as the dense array size.
 -- Given that the sparse array size is x, then keys from 0..x can be used. maxBound may never be used for x.
 -- Given that the dense array size is y, then y values can be stored. y should not be larger than x.
-create :: forall a m. (ElementConstraint a, MonadIO m) => Word32 -> Word32 -> m (SparseSetStorable a)
+create :: (ElementConstraint a, MonadIO m) => Word32 -> Word32 -> m (SparseSetStorable a)
 create sparseSize denseSize = liftIO $ do
   !sparse <- VPM.replicate (fromIntegral sparseSize) maxBound
-  !dense <- F.mallocBytes (F.sizeOf (undefined :: a) * fromIntegral denseSize)
+  !dense <- VM.new (fromIntegral denseSize)
   !entities <- VPM.new (fromIntegral denseSize)
   let !size = 0
   SparseSetStorable sparse entities dense <$> newIORef size
@@ -63,23 +62,14 @@ insert :: (ElementConstraint a, MonadIO m) => SparseSetStorable a -> Word32 -> a
 insert (SparseSetStorable sparse entities dense sizeRef) i a = liftIO $ do
   index <- VPM.unsafeRead sparse (fromIntegral i)
   if index /= maxBound
-    then write dense (fromIntegral index) a
+    then VM.unsafeWrite dense (fromIntegral index) a
     else do
       nextIndex <- atomicModifyIORef' sizeRef (\size -> (succ size, size))
-      write dense nextIndex a
+      let denseSize = VM.length dense
+      VM.unsafeWrite dense nextIndex a
       VPM.unsafeWrite entities nextIndex i
       VPM.unsafeWrite sparse (fromIntegral i) (fromIntegral nextIndex)
 {-# INLINE insert #-}
-
-write :: forall a. F.Storable a => F.Ptr a -> Int -> a -> IO ()
-write ptr i v =
-  F.poke (ptr `F.plusPtr` (i * F.sizeOf (undefined :: a))) v
-{-# INLINE write #-}
-
-readV :: forall a. F.Storable a => F.Ptr a -> Int -> IO a
-readV ptr i =
-  F.peek (ptr `F.plusPtr` (i * F.sizeOf (undefined :: a)))
-{-# INLINE readV #-}
 
 -- | Returns true if the given key is in the set.
 contains :: MonadIO m => SparseSetStorable a -> Word32 -> m Bool
@@ -98,7 +88,7 @@ lookup :: (ElementConstraint a, MonadIO m) => SparseSetStorable a -> Word32 -> m
 lookup (SparseSetStorable sparse _ dense _) i = liftIO $ do
   index <- VPM.unsafeRead sparse (fromIntegral i)
   if index /= maxBound
-    then Just <$> readV dense (fromIntegral index)
+    then Just <$> VM.unsafeRead dense (fromIntegral index)
     else pure Nothing
 {-# INLINE lookup #-}
 
@@ -107,7 +97,7 @@ lookup (SparseSetStorable sparse _ dense _) i = liftIO $ do
 unsafeLookup :: (ElementConstraint a, MonadIO m) => SparseSetStorable a -> Word32 -> m a
 unsafeLookup (SparseSetStorable sparse _ dense _) i = liftIO $ do
   index <- VPM.unsafeRead sparse (fromIntegral i)
-  readV dense (fromIntegral index)
+  VM.unsafeRead dense (fromIntegral index)
 {-# INLINE unsafeLookup #-}
 
 -- | Removes an index from the set. Does nothing if the index does not exist.
@@ -119,10 +109,10 @@ remove (SparseSetStorable sparse entities dense sizeRef) i = liftIO $ do
     else do
       lastDenseIndex <- atomicModifyIORef sizeRef $ \size -> let s = max 0 (pred size) in (s, s)
 
-      lastElement <- readV dense lastDenseIndex
+      lastElement <- VM.unsafeRead dense lastDenseIndex
       lastKey <- VPM.unsafeRead entities lastDenseIndex
 
-      write dense (fromIntegral index) lastElement
+      VM.unsafeWrite dense (fromIntegral index) lastElement
       VPM.unsafeWrite entities (fromIntegral index) lastKey
 
       VPM.unsafeWrite sparse (fromIntegral lastKey) index
@@ -136,18 +126,18 @@ for (SparseSetStorable _ entities dense sizeRef) f = do
 
   forM_ [0 .. pred size] $ \i -> do
     key <- liftIO $ VPM.unsafeRead entities i
-    val <- liftIO $ readV dense i
+    val <- liftIO $ VM.unsafeRead dense i
 
     f key val
 {-# INLINE for #-}
 
 -- | Grows the dense array by 50 percent.
--- growDense :: (ElementConstraint a, MonadIO m) => SparseSetStorable a -> m (SparseSetStorable a)
--- growDense (SparseSetStorable sparse entities dense sizeRef) = liftIO $ do
---   let entitySize = VPM.length entities
---   newDense <- VM.unsafeGrow dense (entitySize `quot` 2)
---   newEntities <- VPM.unsafeGrow entities (entitySize `quot` 2)
---   pure $ SparseSetStorable sparse newEntities newDense sizeRef
+growDense :: (ElementConstraint a, MonadIO m) => SparseSetStorable a -> m (SparseSetStorable a)
+growDense (SparseSetStorable sparse entities dense sizeRef) = liftIO $ do
+  let entitySize = VPM.length entities
+  newDense <- VM.unsafeGrow dense (entitySize `quot` 2)
+  newEntities <- VPM.unsafeGrow entities (entitySize `quot` 2)
+  pure $ SparseSetStorable sparse newEntities newDense sizeRef
 
 -- | Visualizes the sparse set in the terminal. Mostly for debugging purposes.
 visualize :: MonadIO m => SparseSetStorable a -> m ()
