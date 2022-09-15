@@ -24,11 +24,16 @@ library
         SparseSet.Boxed
         SparseSet.NoComponent
         SparseSet.Storable
+        SparseSet.Storable2
+        SparseSet.StorableBoxed
+
         SparseSet.Unboxed
         SparseSet.NextId.NoComponent
+        SparseSet.Mutable
     build-depends:    
         base ^>=4.16.0.0,
-        vector
+        vector,
+        mutable-containers
     hs-source-dirs:   src
     default-language: GHC2021
     ghc-options: -O2

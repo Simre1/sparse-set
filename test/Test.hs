@@ -1,7 +1,7 @@
 module Main (main) where
 
 import SparseSet.NextId.NoComponent qualified as N
-import SparseSet.Storable qualified as S
+import SparseSet.StorableBoxed qualified as S
 import Test.Tasty
 import Test.Tasty.HUnit
 
