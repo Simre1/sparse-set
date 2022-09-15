@@ -5,7 +5,7 @@ synopsis:
 
 -- A longer description of the package.
 -- description:
-homepage:
+homepage: https://github.com/Simre1/sparse-set
 
 -- A URL where users can report bugs.
 -- bug-reports:
@@ -17,23 +17,61 @@ maintainer:         simre4775@gmail.com
 -- A copyright notice.
 -- copyright:
 category:           Data
-extra-source-files: CHANGELOG.md
+extra-source-files:
+  CHANGELOG.md,
+  README.md
 
 library
-    exposed-modules:  
-        SparseSet.Boxed
-        SparseSet.NoComponent
-        SparseSet.Storable
-        SparseSet.Unboxed
-    build-depends:    
-        base ^>=4.16.0.0,
+    exposed-modules:
+        Data.SparseSet.Boxed
+        Data.SparseSet.NoComponent
+        Data.SparseSet.Storable
+        Data.SparseSet.Unboxed
+    build-depends:
+        base >=4.14.0.0,
         vector
     hs-source-dirs:   src
-    default-language: GHC2021
+    default-extensions:
+      ApplicativeDo
+      BangPatterns
+      BlockArguments
+      ConstraintKinds
+      DeriveGeneric
+      DerivingStrategies
+      DuplicateRecordFields
+      FlexibleContexts
+      GeneralizedNewtypeDeriving
+      ImportQualifiedPost
+      KindSignatures
+      LambdaCase
+      OverloadedStrings
+      PatternSynonyms
+      RecordWildCards
+      StrictData
+      TypeApplications
 
 test-suite sparse-set-test
-    default-language: GHC2021
-    type:             exitcode-stdio-1.0
-    hs-source-dirs:   test
-    main-is:          MyLibTest.hs
-    build-depends:    base ^>=4.16.0.0
+    type: exitcode-stdio-1.0
+    hs-source-dirs: test
+    main-is: Main.hs
+    build-depends:
+      base >=4.14.0.0,
+      sparse-set
+    default-extensions:
+      ApplicativeDo
+      BangPatterns
+      BlockArguments
+      ConstraintKinds
+      DeriveGeneric
+      DerivingStrategies
+      DuplicateRecordFields
+      FlexibleContexts
+      GeneralizedNewtypeDeriving
+      ImportQualifiedPost
+      KindSignatures
+      LambdaCase
+      OverloadedStrings
+      PatternSynonyms
+      RecordWildCards
+      StrictData
+      TypeApplications
