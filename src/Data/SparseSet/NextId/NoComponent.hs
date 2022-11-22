@@ -1,4 +1,4 @@
-module SparseSet.NextId.NoComponent
+module Data.SparseSet.NextId.NoComponent
   ( SparseSetNextIdNoComponent,
     create,
     nextId,

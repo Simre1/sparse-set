@@ -1,4 +1,4 @@
-module SparseSet.NoComponent
+module Data.SparseSet.NoComponent
   ( SparseSetNoComponent,
     create,
     insert,
@@ -32,9 +32,9 @@ import Prelude hiding (lookup)
 -- The sparse set is useful when you have a lot of possible keys but not that many values
 -- to actually store. Iteration over the values is very quick.
 data SparseSetNoComponent = SparseSetNoComponent
-  { sparseSetSparse :: {-# UNPACK #-} !(VPM.IOVector Word32),
-    sparseSetEntities :: {-# UNPACK #-} !(VPM.IOVector Word32),
-    sparseSetSize :: {-# UNPACK #-} !(IORef Int)
+  { sparseSetSparse :: {-# UNPACK #-} VPM.IOVector Word32,
+    sparseSetEntities :: {-# UNPACK #-} VPM.IOVector Word32,
+    sparseSetSize :: {-# UNPACK #-} IORef Int
   }
 
 -- | Creates a sparse set with the first value as the sparse array size and the second as the dense array size.

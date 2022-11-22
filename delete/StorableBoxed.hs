@@ -1,7 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE PatternSynonyms #-}
 
-module SparseSet.Storable2 where
+module Data.SparseSet.Boxed where
 
 import Control.Monad (forM_)
 import Control.Monad.IO.Class (MonadIO (..))
@@ -14,7 +14,6 @@ import Data.IORef
     writeIORef,
   )
 import Data.Kind (Constraint)
-import Data.Mutable
 import Data.Vector.Primitive qualified as VP
 import Data.Vector.Primitive.Mutable qualified as VPM
 import Data.Vector.Storable qualified as V
@@ -23,11 +22,17 @@ import Data.Word (Word32)
 import Foreign.Marshal (malloc, mallocBytes)
 import Foreign.Ptr
 import Foreign.Storable
-import SparseSet.Mutable
 import Prelude hiding (lookup)
 import Data.Foldable (foldlM)
 import Data.Vector.Generic.Mutable (set)
+import Data.Void
 
+
+newtype Size = Size Word32 deriving (Storable)
+
+newtype DenseSize = DenseSize Word32 deriving (Show, Eq, Storable, Ord)
+
+newtype SparseSize = SparseSize Word32 deriving (Show, Eq, Storable, Ord)
 -- | The sparse set contains a sparse array and a dense array. The 'a' values are stored
 -- within the dense array and can be iterated over quickly. The sparse array holds
 -- the index of an element to the dense array.
@@ -35,27 +40,17 @@ import Data.Vector.Generic.Mutable (set)
 -- to actually store. Iteration over the values is very quick.
 
 -- Size
+-- DenseStore
 -- SparseSize
--- DenseSize
 -- Sparse
+-- DenseSize
 -- Dense
 
 newtype SparseArray = SparseArray (Ptr ())
 
 newtype DenseArray a = DenseArray (Ptr ())
 
-sizeOf' :: forall a. Storable a => Int
-sizeOf' = sizeOf (undefined :: a)
-
-newtype Size = Size Word32 deriving (Storable)
-
-newtype SparseSize = SparseSize Word32 deriving (Storable)
-
-newtype DenseSize = DenseSize Word32 deriving (Storable)
-
-newtype SparseSetStorable2 a = SparseSetStorable2 (Ptr (SparseSetStorable a))
-
-newtype SparseSetStorable a = SparseSetStorable (Ptr ()) deriving Storable
+data SparseSetStorable a = SparseSetStorable {-# UNPACK #-} !(Ptr ())
 
 arrayOffset :: Int
 arrayOffset = 3 * sizeOf' @Word32
@@ -142,7 +137,7 @@ type ElementConstraint a = V.Storable a :: Constraint
 -- | Creates a sparse set with the first value as the sparse array size and the second as the dense array size.
 -- Given that the sparse array size is x, then keys from 0..x can be used. maxBound may never be used for x.
 -- Given that the dense array size is y, then y values can be stored. y should not be larger than x.
-create :: forall a m. (ElementConstraint a, MonadIO m) => Word32 -> Word32 -> m (SparseSetStorable2 a)
+create :: forall a m. (ElementConstraint a, MonadIO m) => Word32 -> Word32 -> m (SparseSetStorable a)
 create sparseSize denseSize = liftIO $ do
   ptr <- mallocBytes (3 * sizeOf' @Word32 + sizeOf' @Word32 * fromIntegral sparseSize + (sizeOf' @Word32 + sizeOf' @a) * fromIntegral denseSize)
 
@@ -159,13 +154,7 @@ create sparseSize denseSize = liftIO $ do
   let sparseArray :: Ptr Word32 = castPtr $ denseSizePtr `plusPtr` sizeOf' @DenseSize
   
   writeMaxBound (sparseArray) sparseSize
-
-  wrapper <- malloc
-
-  poke wrapper (SparseSetStorable ptr) 
-
-  pure $ SparseSetStorable2 wrapper
-
+  pure $ SparseSetStorable ptr
   where 
     writeMaxBound ptr 0 = pure ()
     writeMaxBound ptr n = poke ptr maxBound >> writeMaxBound (ptr `plusPtr` sizeOf' @Word32) (n - 1)  
@@ -173,9 +162,8 @@ create sparseSize denseSize = liftIO $ do
 
 -- | Inserts a value into the sparse set at the given 'Word32' index.
 -- Overwrites the old value if there is one.
-insert :: (ElementConstraint a, MonadIO m) => SparseSetStorable2 a -> Word32 -> a -> m ()
-insert (SparseSetStorable2 set') i a = {-# SCC insert #-} liftIO $ do
-  set <- peek set'
+insert :: (ElementConstraint a, MonadIO m) => SparseSetStorable a -> Word32 -> a -> m (SparseSetStorable a)
+insert set i a = {-# SCC insert #-} liftIO $ do
   let i' = fromIntegral i
   sparseArray <- getSparseArray set
   denseArray <- getDenseArray set
@@ -183,31 +171,32 @@ insert (SparseSetStorable2 set') i a = {-# SCC insert #-} liftIO $ do
   if index /= maxBound
     then do
       unsafeWriteDenseValue set denseArray (fromIntegral index) a
+      pure set
     else do
       nextIndex <- getSize set
       writeSize set (succ nextIndex)
       let nextIndex' = fromIntegral nextIndex
       unsafeWriteDense set denseArray nextIndex' (i, a)
       unsafeWriteSparse set sparseArray i' nextIndex
+      pure set
 {-# INLINE insert #-}
 
 
 -- -- | Returns true if the given key is in the set.
-contains :: MonadIO m => SparseSetStorable2 a -> Word32 -> m Bool
-contains set' i = {-# SCC contains #-}  liftIO $ do
-  set <- peek (coerce set')
+contains :: MonadIO m => SparseSetStorable a -> Word32 -> m Bool
+contains set i = {-# SCC contains #-}  liftIO $ do
   sparseArray <- getSparseArray set
   v <- unsafeReadSparse set sparseArray (fromIntegral i)
   pure $ v /= (maxBound :: Word32)
 {-# INLINE contains #-}
 
 -- -- | Returns the amount of values in the set
-size :: MonadIO m => SparseSetStorable2 a -> m Int
-size (SparseSetStorable2 set') = liftIO $ peek set' >>= fmap fromIntegral . getSize
+size :: MonadIO m => SparseSetStorable a -> m Int
+size = liftIO . fmap fromIntegral . getSize
 {-# INLINE size #-}
 
 -- | Returns the value at the given index or Nothing if the index is not within the set
-lookup :: (ElementConstraint a, MonadIO m) => SparseSetStorable2 a -> Word32 -> m (Maybe a)
+lookup :: (ElementConstraint a, MonadIO m) => SparseSetStorable a -> Word32 -> m (Maybe a)
 lookup set i = do
   c <- contains set i
   if c
@@ -217,9 +206,8 @@ lookup set i = do
 
 -- -- | Returns the value at the given index. Only really safe directly after a 'contains' check
 -- --  and may segfault if the index does not exist.
-unsafeLookup :: (ElementConstraint a, MonadIO m) => SparseSetStorable2 a -> Word32 -> m a
-unsafeLookup set' i = {-# SCC unsafeLookup #-}  liftIO $ do
-  set <- peek (coerce set')
+unsafeLookup :: (ElementConstraint a, MonadIO m) => SparseSetStorable a -> Word32 -> m a
+unsafeLookup set i = {-# SCC unsafeLookup #-}  liftIO $ do
   sparseArray <- getSparseArray set
   denseArray <- getDenseArray set
 
@@ -228,14 +216,13 @@ unsafeLookup set' i = {-# SCC unsafeLookup #-}  liftIO $ do
 {-# INLINE unsafeLookup #-}
 
 -- -- | Removes an index from the set. Does nothing if the index does not exist.
-remove :: forall a m. (ElementConstraint a, MonadIO m) => SparseSetStorable2 a -> Word32 -> m ()
-remove set' i = liftIO $ do
-  set :: SparseSetStorable a <- peek (coerce set')
+remove :: forall a m. (ElementConstraint a, MonadIO m) => SparseSetStorable a -> Word32 -> m (SparseSetStorable a)
+remove set i = liftIO $ do
   let i' = fromIntegral i
   sparseArray <- getSparseArray set
   index <- unsafeReadSparse set sparseArray i'
   if index == maxBound
-    then pure ()
+    then pure set
     else do
       s <- getSize set
       denseArray <- getDenseArray set
@@ -250,13 +237,12 @@ remove set' i = liftIO $ do
       unsafeWriteSparse set sparseArray (fromIntegral lastKey) index
 
       unsafeWriteSparse set sparseArray i' maxBound
-      pure ()
+      pure set
 {-# INLINE remove #-}
 
 -- -- | Iterate over all values with their corresponding key.
-for :: (ElementConstraint a, MonadIO m) => SparseSetStorable2 a -> (Word32 -> a -> m ()) -> m ()
-for set' f = {-# SCC for #-} do
-  set <- liftIO $ peek (coerce set')
+for :: (ElementConstraint a, MonadIO m) => SparseSetStorable a -> (Word32 -> a -> m ()) -> m ()
+for set f = {-# SCC for #-} do
   s <- liftIO $ getSize set
   denseArray <- liftIO $ getDenseArray set
   forM_ [0 .. pred (fromIntegral s)] $ \i -> do
@@ -300,3 +286,5 @@ visualize set = liftIO $ do
   putStrLn ""
 
 
+sizeOf' :: forall a. Storable a => Int
+sizeOf' = sizeOf (undefined :: a)

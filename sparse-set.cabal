@@ -5,7 +5,7 @@ synopsis:
 
 -- A longer description of the package.
 -- description:
-homepage:
+homepage: https://github.com/Simre1/sparse-set
 
 -- A URL where users can report bugs.
 -- bug-reports:
@@ -17,30 +17,68 @@ maintainer:         simre4775@gmail.com
 -- A copyright notice.
 -- copyright:
 category:           Data
-extra-source-files: CHANGELOG.md
+extra-source-files:
+  CHANGELOG.md,
+  README.md
 
 library
-    exposed-modules:  
-        SparseSet.Boxed
-        SparseSet.NoComponent
-        SparseSet.Storable
-        SparseSet.Storable2
-        SparseSet.StorableBoxed
+    exposed-modules:
 
-        SparseSet.Unboxed
-        SparseSet.NextId.NoComponent
-        SparseSet.Mutable
-    build-depends:    
-        base ^>=4.16.0.0,
+        Data.SparseSet.Storable
+        Data.SparseSet.Boxed
+        Data.SparseSet.NextId.NoComponent
+    build-depends:
+        base >=4.14.0.0,
         vector,
-        mutable-containers
+        mutable-containers,
+        optics-core
     hs-source-dirs:   src
-    default-language: GHC2021
-    ghc-options: -O2
-
+    default-extensions:
+      BangPatterns
+      ConstraintKinds
+      DeriveGeneric
+      DerivingStrategies
+      DuplicateRecordFields
+      NoFieldSelectors
+      FlexibleContexts
+      GeneralizedNewtypeDeriving
+      ImportQualifiedPost
+      KindSignatures
+      LambdaCase
+      OverloadedStrings
+      TypeApplications
+      RankNTypes
+      ScopedTypeVariables
+      TypeFamilies
+      MultiParamTypeClasses
+      OverloadedLabels
+    
 test-suite sparse-set-test
-    default-language: GHC2021
-    type:             exitcode-stdio-1.0
-    hs-source-dirs:   test
-    main-is:          Test.hs
-    build-depends:    base ^>=4.16.0.0, tasty, tasty-hunit, sparse-set
+    type: exitcode-stdio-1.0
+    hs-source-dirs: test
+    main-is: Main.hs
+    build-depends:
+      base >=4.14.0.0,
+      sparse-set,
+      tasty,
+      tasty-bench,
+      tasty-hunit,
+      transformers
+    default-extensions:
+      ApplicativeDo
+      BangPatterns
+      BlockArguments
+      ConstraintKinds
+      DeriveGeneric
+      DerivingStrategies
+      DuplicateRecordFields
+      FlexibleContexts
+      GeneralizedNewtypeDeriving
+      ImportQualifiedPost
+      KindSignatures
+      LambdaCase
+      OverloadedStrings
+      PatternSynonyms
+      RecordWildCards
+      StrictData
+      TypeApplications

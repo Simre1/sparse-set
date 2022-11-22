@@ -1,5 +1,5 @@
-module SparseSet.Boxed
-  ( SparseSetBoxed,
+module Data.SparseSet.Unboxed
+  ( SparseSetUnboxed,
     create,
     insert,
     contains,
@@ -23,10 +23,10 @@ import Data.IORef
     readIORef,
   )
 import Data.Kind (Constraint)
-import Data.Vector qualified as V
-import Data.Vector.Mutable qualified as VM
 import Data.Vector.Primitive qualified as VP
 import Data.Vector.Primitive.Mutable qualified as VPM
+import Data.Vector.Unboxed qualified as V
+import Data.Vector.Unboxed.Mutable qualified as VM
 import Data.Word (Word32)
 import Prelude hiding (lookup)
 
@@ -35,31 +35,31 @@ import Prelude hiding (lookup)
 -- the index of an element to the dense array.
 -- The sparse set is useful when you have a lot of possible keys but not that many values
 -- to actually store. Iteration over the values is very quick.
-data SparseSetBoxed a = SparseSetBoxed
-  { sparseSetSparse :: {-# UNPACK #-} !(VPM.IOVector Word32),
-    sparseSetEntities :: {-# UNPACK #-} !(VPM.IOVector Word32),
-    sparseSetDense :: {-# UNPACK #-} !(VM.IOVector a),
-    sparseSetSize :: {-# UNPACK #-} !(IORef Int)
+data SparseSetUnboxed a = SparseSetUnboxed
+  { sparseSetSparse :: {-# UNPACK #-} VPM.IOVector Word32,
+    sparseSetEntities :: {-# UNPACK #-} VPM.IOVector Word32,
+    sparseSetDense :: VM.IOVector a,
+    sparseSetSize :: {-# UNPACK #-} IORef Int
   }
 
-type ElementConstraint a = () :: Constraint
+type ElementConstraint a = V.Unbox a :: Constraint
 
 -- | Creates a sparse set with the first value as the sparse array size and the second as the dense array size.
 -- Given that the sparse array size is x, then keys from 0..x can be used. maxBound may never be used for x.
 -- Given that the dense array size is y, then y values can be stored. y should not be larger than x.
-create :: (ElementConstraint a, MonadIO m) => Word32 -> Word32 -> m (SparseSetBoxed a)
+create :: (ElementConstraint a, MonadIO m) => Word32 -> Word32 -> m (SparseSetUnboxed a)
 create sparseSize denseSize = liftIO $ do
   !sparse <- VPM.replicate (fromIntegral sparseSize) maxBound
   !dense <- VM.new (fromIntegral denseSize)
   !entities <- VPM.new (fromIntegral denseSize)
   let !size = 0
-  SparseSetBoxed sparse entities dense <$> newIORef size
+  SparseSetUnboxed sparse entities dense <$> newIORef size
 {-# INLINE create #-}
 
 -- | Inserts a value into the sparse set at the given 'Word32' index.
 -- Overwrites the old value if there is one.
-insert :: (ElementConstraint a, MonadIO m) => SparseSetBoxed a -> Word32 -> a -> m ()
-insert (SparseSetBoxed sparse entities dense sizeRef) i a = liftIO $ do
+insert :: (ElementConstraint a, MonadIO m) => SparseSetUnboxed a -> Word32 -> a -> m ()
+insert (SparseSetUnboxed sparse entities dense sizeRef) i a = liftIO $ do
   index <- VPM.unsafeRead sparse (fromIntegral i)
   if index /= maxBound
     then VM.unsafeWrite dense (fromIntegral index) a
@@ -72,20 +72,20 @@ insert (SparseSetBoxed sparse entities dense sizeRef) i a = liftIO $ do
 {-# INLINE insert #-}
 
 -- | Returns true if the given key is in the set.
-contains :: MonadIO m => SparseSetBoxed a -> Word32 -> m Bool
-contains (SparseSetBoxed sparse _ _ _) i = liftIO $ do
+contains :: MonadIO m => SparseSetUnboxed a -> Word32 -> m Bool
+contains (SparseSetUnboxed sparse _ _ _) i = liftIO $ do
   v <- VPM.unsafeRead sparse (fromIntegral i)
   pure $ v /= (maxBound :: Word32)
 {-# INLINE contains #-}
 
 -- | Returns the amount of values in the set
-size :: MonadIO m => SparseSetBoxed a -> m Int
-size (SparseSetBoxed _ _ _ sizeRef) = liftIO $ readIORef sizeRef
+size :: MonadIO m => SparseSetUnboxed a -> m Int
+size (SparseSetUnboxed _ _ _ sizeRef) = liftIO $ readIORef sizeRef
 {-# INLINE size #-}
 
 -- | Returns the value at the given index or Nothing if the index is not within the set
-lookup :: (ElementConstraint a, MonadIO m) => SparseSetBoxed a -> Word32 -> m (Maybe a)
-lookup (SparseSetBoxed sparse _ dense _) i = liftIO $ do
+lookup :: (ElementConstraint a, MonadIO m) => SparseSetUnboxed a -> Word32 -> m (Maybe a)
+lookup (SparseSetUnboxed sparse _ dense _) i = liftIO $ do
   index <- VPM.unsafeRead sparse (fromIntegral i)
   if index /= maxBound
     then Just <$> VM.unsafeRead dense (fromIntegral index)
@@ -94,15 +94,15 @@ lookup (SparseSetBoxed sparse _ dense _) i = liftIO $ do
 
 -- | Returns the value at the given index. Only really safe directly after a 'contains' check
 --  and may segfault if the index does not exist.
-unsafeLookup :: (ElementConstraint a, MonadIO m) => SparseSetBoxed a -> Word32 -> m a
-unsafeLookup (SparseSetBoxed sparse _ dense _) i = liftIO $ do
+unsafeLookup :: (ElementConstraint a, MonadIO m) => SparseSetUnboxed a -> Word32 -> m a
+unsafeLookup (SparseSetUnboxed sparse _ dense _) i = liftIO $ do
   index <- VPM.unsafeRead sparse (fromIntegral i)
   VM.unsafeRead dense (fromIntegral index)
 {-# INLINE unsafeLookup #-}
 
 -- | Removes an index from the set. Does nothing if the index does not exist.
-remove :: (ElementConstraint a, MonadIO m) => SparseSetBoxed a -> Word32 -> m ()
-remove (SparseSetBoxed sparse entities dense sizeRef) i = liftIO $ do
+remove :: (ElementConstraint a, MonadIO m) => SparseSetUnboxed a -> Word32 -> m ()
+remove (SparseSetUnboxed sparse entities dense sizeRef) i = liftIO $ do
   index <- VPM.unsafeRead sparse (fromIntegral i)
   if index == maxBound
     then pure ()
@@ -120,8 +120,8 @@ remove (SparseSetBoxed sparse entities dense sizeRef) i = liftIO $ do
 {-# INLINE remove #-}
 
 -- | Iterate over all values with their corresponding key.
-for :: (ElementConstraint a, MonadIO m) => SparseSetBoxed a -> (Word32 -> a -> m ()) -> m ()
-for (SparseSetBoxed _ entities dense sizeRef) f = do
+for :: (ElementConstraint a, MonadIO m) => SparseSetUnboxed a -> (Word32 -> a -> m ()) -> m ()
+for (SparseSetUnboxed _ entities dense sizeRef) f = do
   size <- liftIO $ readIORef sizeRef
 
   forM_ [0 .. pred size] $ \i -> do
@@ -132,16 +132,16 @@ for (SparseSetBoxed _ entities dense sizeRef) f = do
 {-# INLINE for #-}
 
 -- | Grows the dense array by 50 percent.
-growDense :: (ElementConstraint a, MonadIO m) => SparseSetBoxed a -> m (SparseSetBoxed a)
-growDense (SparseSetBoxed sparse entities dense sizeRef) = liftIO $ do
+growDense :: (ElementConstraint a, MonadIO m) => SparseSetUnboxed a -> m (SparseSetUnboxed a)
+growDense (SparseSetUnboxed sparse entities dense sizeRef) = liftIO $ do
   let entitySize = VPM.length entities
   newDense <- VM.unsafeGrow dense (entitySize `quot` 2)
   newEntities <- VPM.unsafeGrow entities (entitySize `quot` 2)
-  pure $ SparseSetBoxed sparse newEntities newDense sizeRef
+  pure $ SparseSetUnboxed sparse newEntities newDense sizeRef
 
 -- | Visualizes the sparse set in the terminal. Mostly for debugging purposes.
-visualize :: MonadIO m => SparseSetBoxed a -> m ()
-visualize (SparseSetBoxed sparse entities sense sizeRef) = liftIO $ do
+visualize :: MonadIO m => SparseSetUnboxed a -> m ()
+visualize (SparseSetUnboxed sparse entities sense sizeRef) = liftIO $ do
   size <- readIORef sizeRef
   putStrLn $ "SparseSet (" <> show size <> ")"
   putStr "Sparse: "
