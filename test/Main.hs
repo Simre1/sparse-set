@@ -41,7 +41,7 @@ sparseSet =
       testGroup
         "NextKey"
         [ testCase "NextKey/Remove" $ do
-            set <- K.create 2 2
+            set <- K.create 2
             K.size set >>= (@?= 0)
             e <- K.nextKey set
             K.size set >>= (@?= 1)

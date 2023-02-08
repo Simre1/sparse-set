@@ -37,14 +37,12 @@ data SparseKeysNoComponent = SparseKeysNoComponent
     sparseSetHeadAndTail :: {-# UNPACK #-} !(IORef (Int, Int))
   }
 
--- | Creates a sparse set with the first value as the sparse array size and the second as the dense array size.
--- Given that the sparse array size is x, then keys from 0..x are used. maxBound may never be used for x.
--- Given that the dense array size is y, then y values can be stored. y should not be larger than x.
-create :: (MonadIO m) => Word32 -> Word32 -> m SparseKeysNoComponent
-create sparseSize denseSize = liftIO $ do
-  !sparse <- VPM.generate (fromIntegral sparseSize) (\i -> setBit (fromIntegral (succ i)) 31)
-  VPM.write sparse (fromIntegral sparseSize - 1) (setBit 0 31)
-  !entities <- VPM.new (fromIntegral denseSize)
+-- | Creates Sparse Keys with the given size. 
+create :: (MonadIO m) => Word32 -> m SparseKeysNoComponent
+create size = liftIO $ do
+  !sparse <- VPM.generate (fromIntegral size) (\i -> setBit (fromIntegral (succ i)) 31)
+  VPM.write sparse (fromIntegral size - 1) (setBit 0 31)
+  !entities <- VPM.new (fromIntegral size)
   let !size = 0
   SparseKeysNoComponent sparse entities <$> newIORef size <*> newIORef (1, 0)
 {-# INLINE create #-}
