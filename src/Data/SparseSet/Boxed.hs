@@ -7,7 +7,7 @@ module Data.SparseSet.Boxed
     unsafeLookup,
     size,
     remove,
-    for,
+    iterate,
     visualize,
     growDense,
   )
@@ -28,7 +28,7 @@ import Data.Vector.Mutable qualified as VM
 import Data.Vector.Primitive qualified as VP
 import Data.Vector.Primitive.Mutable qualified as VPM
 import Data.Word (Word32)
-import Prelude hiding (lookup)
+import Prelude hiding (lookup, iterate)
 
 -- | The sparse set contains a sparse array and a dense array. The 'a' values are stored
 -- within the dense array and can be iterated over quickly. The sparse array holds
@@ -120,8 +120,8 @@ remove (SparseSetBoxed sparse entities dense sizeRef) i = liftIO $ do
 {-# INLINE remove #-}
 
 -- | Iterate over all values with their corresponding key.
-for :: (ElementConstraint a, MonadIO m) => SparseSetBoxed a -> (Word32 -> a -> m ()) -> m ()
-for (SparseSetBoxed _ entities dense sizeRef) f = do
+iterate :: (ElementConstraint a, MonadIO m) => SparseSetBoxed a -> (Word32 -> a -> m ()) -> m ()
+iterate (SparseSetBoxed _ entities dense sizeRef) f = do
   size <- liftIO $ readIORef sizeRef
 
   forM_ [0 .. pred size] $ \i -> do
@@ -129,7 +129,7 @@ for (SparseSetBoxed _ entities dense sizeRef) f = do
     val <- liftIO $ VM.unsafeRead dense i
 
     f key val
-{-# INLINE for #-}
+{-# INLINE iterate #-}
 
 -- | Grows the dense array by 50 percent.
 growDense :: (ElementConstraint a, MonadIO m) => SparseSetBoxed a -> m (SparseSetBoxed a)

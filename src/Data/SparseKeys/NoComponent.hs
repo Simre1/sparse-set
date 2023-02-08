@@ -5,7 +5,7 @@ module Data.SparseKeys.NoComponent
     contains,
     size,
     remove,
-    for,
+    iterate,
     visualize,
     growDense,
   )
@@ -26,7 +26,7 @@ import Data.Kind (Constraint)
 import Data.Vector.Primitive qualified as VP
 import Data.Vector.Primitive.Mutable qualified as VPM
 import Data.Word (Word32)
-import Prelude hiding (lookup)
+import Prelude hiding (lookup, iterate)
 
 -- | The Sparse keys are used to create keys with `nextKey`. The keys can be iterated over with `for`.
 -- Keys are created in constant time until the sparse keys set is completely full.
@@ -105,15 +105,15 @@ remove (SparseKeysNoComponent sparse entities sizeRef headAndTailRef) i = liftIO
 {-# INLINE remove #-}
 
 -- | Iterate over all values with their corresponding key.
-for :: (MonadIO m) => SparseKeysNoComponent -> (Word32 -> m ()) -> m ()
-for (SparseKeysNoComponent _ entities sizeRef _) f = do
+iterate :: (MonadIO m) => SparseKeysNoComponent -> (Word32 -> m ()) -> m ()
+iterate (SparseKeysNoComponent _ entities sizeRef _) f = do
   size <- liftIO $ readIORef sizeRef
 
   forM_ [0 .. pred size] $ \i -> do
     key <- liftIO $ VPM.unsafeRead entities i
 
     f key
-{-# INLINE for #-}
+{-# INLINE iterate #-}
 
 -- | Grows the dense array by 50 percent.
 growDense :: (MonadIO m) => SparseKeysNoComponent -> m SparseKeysNoComponent
