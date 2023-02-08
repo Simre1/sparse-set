@@ -23,6 +23,8 @@ extra-source-files:
 
 library
     exposed-modules:
+        Data.SparseKeys.NoComponent
+
         Data.SparseSet.Boxed
         Data.SparseSet.NoComponent
         Data.SparseSet.Storable
@@ -56,7 +58,9 @@ test-suite sparse-set-test
     main-is: Main.hs
     build-depends:
       base >=4.14.0.0,
-      sparse-set
+      sparse-set,
+      tasty,
+      tasty-hunit
     default-extensions:
       ApplicativeDo
       BangPatterns
